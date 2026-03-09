@@ -1,0 +1,726 @@
+---
+title: "Impact Evaluation"
+author: "Belinda Galstyan"
+date: "2023-04-22"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+In this paper we will be using methods learned in class to assess whether the results found by the author still hold once we apply more sophisticated methods of inference. In the first part we will implement the plausibly exogenous methodology assuming that the direct impact of the instrument is uncertain, thus building a distribution for this parameter based on a prior. The second part will make use of Young's insights by infering leverages for different observations, and performing alternative inference methods to tackle uneven leverage distribution. 
+
+## Data and Replication 
+
+```{r Import and clean data, include=FALSE}
+rm(list=ls(all=TRUE))
+library(dplyr)
+library(tidyverse)
+library(ivreg)
+library(lmtest)
+library(haven)
+library(ggpubr)
+
+# Change the filepath for your own when you run this
+work_dir <- 'C:\\Users\\gdhlt\\OneDrive\\Documents\\IHEID\\EI041\\Midterm'
+setwd(work_dir)
+data=read_dta("war_data_district.dta")
+
+
+
+```
+
+This first section will consist of discussion of the replicated results, and further implement plausibly exogenous methodology. 
+
+From the results below we can see that we successfully managed to replicate paper's results by selecting the relevant controls, by using the IV method and by clustering the errors at a province level (thus allowing correlation between the observations that belong to the same cluster). The result of the paper show that areas that got bombed the most did not fall into poverty traps, and other results not shown below perfectly mirror the results from the paper, thus leading to the same conclusions. 
+
+```{r Define first and second stage regressions, echo = FALSE}
+
+formula1 <- as.formula(poverty_p0 ~ 
+                         tot_bmr_per
+                       + popdensity6061
+                       + south
+                       + area_251_500m 
+                       + area_501_1000m
+                       + area_over_1000m
+                       + north_lat
+                       + pre_avg 
+                       + tmp_avg
+                       + soil_1 + soil_3 + soil_6 + soil_7 + soil_8+ soil_9 + soil_10 
+                       + soil_11 + soil_12 + soil_14 + soil_24 + soil_26 + soil_33 
+                       + soil_34 + soil_35 + soil_39 + soil_40 + soil_41 |
+                         diff_17
+                       + popdensity6061
+                       + south
+                       + area_251_500m 
+                       + area_501_1000m
+                       + area_over_1000m
+                       + north_lat
+                       + pre_avg 
+                       + tmp_avg
+                       + soil_1 + soil_3 + soil_6 + soil_7 + soil_8+ soil_9 + soil_10 
+                       + soil_11 + soil_12 + soil_14 + soil_24 + soil_26 + soil_33 
+                       + soil_34 + soil_35 + soil_39 + soil_40 + soil_41)
+
+formula2 <- as.formula(elec_rate ~ 
+                         tot_bmr_per
+                       + popdensity6061
+                       + south
+                       + area_251_500m 
+                       + area_501_1000m
+                       + area_over_1000m
+                       + north_lat
+                       + pre_avg 
+                       + tmp_avg
+                       + soil_1 + soil_3 + soil_6 + soil_7 + soil_8+ soil_9 + soil_10 
+                       + soil_11 + soil_12 + soil_14 + soil_24 + soil_26 + soil_33 
+                       + soil_34 + soil_35 + soil_39 + soil_40 + soil_41 |
+                         diff_17
+                       + popdensity6061
+                       + south
+                       + area_251_500m 
+                       + area_501_1000m
+                       + area_over_1000m
+                       + north_lat
+                       + pre_avg 
+                       + tmp_avg
+                       + soil_1 + soil_3 + soil_6 + soil_7 + soil_8+ soil_9 + soil_10 
+                       + soil_11 + soil_12 + soil_14 + soil_24 + soil_26 + soil_33 
+                       + soil_34 + soil_35 + soil_39 + soil_40 + soil_41)
+
+formula3 <- as.formula(lit_rate ~ 
+                         tot_bmr_per
+                       + popdensity6061
+                       + south
+                       + area_251_500m 
+                       + area_501_1000m
+                       + area_over_1000m
+                       + north_lat
+                       + pre_avg 
+                       + tmp_avg
+                       + soil_1 + soil_3 + soil_6 + soil_7 + soil_8+ soil_9 + soil_10 
+                       + soil_11 + soil_12 + soil_14 + soil_24 + soil_26 + soil_33 
+                       + soil_34 + soil_35 + soil_39 + soil_40 + soil_41 |
+                         diff_17
+                       + popdensity6061
+                       + south
+                       + area_251_500m 
+                       + area_501_1000m
+                       + area_over_1000m
+                       + north_lat
+                       + pre_avg 
+                       + tmp_avg
+                       + soil_1 + soil_3 + soil_6 + soil_7 + soil_8+ soil_9 + soil_10 
+                       + soil_11 + soil_12 + soil_14 + soil_24 + soil_26 + soil_33 
+                       + soil_34 + soil_35 + soil_39 + soil_40 + soil_41)
+
+formula4 <- as.formula(popdensity1999 ~ 
+                         tot_bmr_per
+                       + popdensity6061
+                       + south
+                       + area_251_500m 
+                       + area_501_1000m
+                       + area_over_1000m
+                       + north_lat
+                       + pre_avg 
+                       + tmp_avg
+                       + soil_1 + soil_3 + soil_6 + soil_7 + soil_8+ soil_9 + soil_10 
+                       + soil_11 + soil_12 + soil_14 + soil_24 + soil_26 + soil_33 
+                       + soil_34 + soil_35 + soil_39 + soil_40 + soil_41 |
+                         diff_17
+                       + popdensity6061
+                       + south
+                       + area_251_500m 
+                       + area_501_1000m
+                       + area_over_1000m
+                       + north_lat
+                       + pre_avg 
+                       + tmp_avg
+                       + soil_1 + soil_3 + soil_6 + soil_7 + soil_8+ soil_9 + soil_10 
+                       + soil_11 + soil_12 + soil_14 + soil_24 + soil_26 + soil_33 
+                       + soil_34 + soil_35 + soil_39 + soil_40 + soil_41)
+```
+
+
+```{r Regression replication, echo=FALSE}
+
+# We replicate the IV results of the paper with clustering to allow for correlations within clusters
+table4_IV <- ivreg(formula1, data = data)
+coeftest(table4_IV, vcov. = sandwich::vcovCL, 
+         cluster = data$province, type="HC1")
+
+table7_IV1 <- ivreg(formula2, data = data)
+coeftest(table7_IV1, vcov. = sandwich::vcovCL, 
+         cluster = data$province, type="HC1")
+
+table7_IV2 <- ivreg(formula3, data = data)
+coeftest(table7_IV2, vcov. = sandwich::vcovCL, 
+         cluster = data$province, type="HC1")
+
+table8_IV <- ivreg(formula4, data = data)
+coeftest(table8_IV, vcov. = sandwich::vcovCL, 
+         cluster = data$province, type="HC1")
+```
+
+## Plausibly exogenous 
+
+Now we will begin innovating. Following the suggestion of footnote 5 from the Plausibly Exogenous paper we began by partialling out the effects of the control variables that the authors assumed non-endogenous. Once left with partialled out bombing intensity, distance from the 17^{th} parallel and the different dependent variables, we performed 10'000 replications for each dependant variable following the description in their paper for the local to zero approximation, with a normal prior on the distribution of gamma with a mean of 0 and a standard deviation of 0.1. This allows us to construct a 95% confidence interval by selecting the 2.5th and 97.5th percentiles. We selected the local-to-zero method with the normal prior over the other methods proposed by Conley, Hansen, and Rossi (2011) for several reasons. First, using a normal prior allows us to have a support over all of the real numbers, which was attractive as we felt there was no reason to make assumptions about the boundedness of the parameter's support. Second, the symmetry of the normal distribution allows us to remain agnostic about the direction of the potential effect on the second stage outcome while establishing a prior of exogeneity. Finally, this method was the easiest to code in the allocated time.
+
+The distributions of the obtained coefficients are reported below, as well as the 2.5 and 97.5 percentiles for each of the 4 coefficients in graphs and a table. As we can see, all contain 0 in their intervals, thus, even by using the new methodology we still obtain insignificant results. Visually, we can see that the density of population coefficient is more different from 0, but it is still not statistically significant. 
+
+
+```{r Create a function that will do the job for us, echo=FALSE}
+
+### Creating a function that will perform the Local to Zero Approximation 
+LZ_approx_CHR <- function(exogenous_vars,
+                          endogenous_vars,
+                          responding_var, 
+                          instrumental_vars,
+                          cluster_var,
+                          mu, omega, m){
+          # W are the exogenous variables
+          # Y is the responding variable
+          # X is an endogenous variable
+          # Z is a matrix of instrumental variables
+          # mu is the mean of the prior (normal) distribution
+          # omega is the covariance matrix of the prior (normal) distribution
+          # m is the number of Monte Carlo replications
+  
+          W <-  as.matrix(exogenous_vars) # stores the exogenous vars 
+          W <- cbind(1, W) # adding a column of ones for the intercept
+          n <- nrow(W) # to construct the diagonal identity matrix of appropriate size
+          X_tilde <- as.matrix(endogenous_vars) # refers to the X tilde from the plausibly exogenous paper
+          Z_tilde <- as.matrix(instrumental_vars) # same for Z tilde 
+          Y_tilde <- as.matrix(responding_var) # same for Y tilde 
+          
+          M_w <- diag(n)-W%*%solve(crossprod(W))%*%t(W) # creating I-Px 
+          X <- M_w%*%X_tilde # the partialled out X
+          Y <- M_w%*%Y_tilde
+          Z <- M_w%*%Z_tilde
+          
+          A <- solve(crossprod(X,Z)%*%solve(crossprod(Z,Z))%*%crossprod(Z,X))%*%crossprod(X,Z) # A matrix from the paper
+          regression <- ivreg(Y ~  -1 + X | Z) # final IV for the partialled out model, yields same results as initial regression
+          beta <- regression$coefficients
+          
+          # Define V as clustered varcov matrix -> otherwise you get ordinary errors, thus lower than the clustered ones
+          V=coeftest(regression, vcov. = sandwich::vcovCL, cluster = data$province, type="HC1")
+
+          beta_hat <- rnorm(m, beta + A*mu, sqrt(V[,2]^2 + A %*% omega %*% t(A))) # not good coding practice, but we obtain V2sls by squaring the sd of the beta coefficient. for the rest, we generate beta hats from a normal distribution centered around beta_hat + the direct impact of the instrument. The Variance also follows papers' suggestions. 
+          return(beta_hat) #vector of m draws from this distribution. 
+}
+
+# Identify the exogenous variables and store them
+
+W_exog <- subset(data, select=c(popdensity6061 , south , area_251_500m , area_501_1000m , area_over_1000m , soil_1 , soil_3 , soil_6 , soil_7 , soil_8 , soil_9 , soil_10 , soil_11 , soil_12 , soil_14 , soil_24, soil_26, soil_33, soil_34, soil_35, soil_39, soil_40, soil_41 , north_lat , pre_avg , tmp_avg))
+
+# Try it once
+
+LZ_approx_CHR(exogenous_vars=W_exog, endogenous_vars=data$tot_bomb_per, 
+              data$poverty_p0, data$diff_17, mu=0, omega=0.1, m=1)
+
+```
+
+
+```{r Approximate sampling distribution for the 4 variables of interest, echo=FALSE}
+
+### We are using a partialled out model, need to get Y and not Y_tilda
+
+### We apply the function to our 4 variables of interest with 10000 draws. 
+
+set.seed(042)
+table4_approx <- LZ_approx_CHR(W_exog, data$tot_bomb_per, 
+                               data$poverty_p0, 
+                               data$diff_17, mu=0, omega=0.1, m=10000)
+q4=quantile(table4_approx, probs = c(0.025,0.975))
+
+table7_a_approx <- LZ_approx_CHR(W_exog, data$tot_bomb_per, 
+                               data$elec_rate, 
+                               data$diff_17, mu=0, omega=0.1, m=10000)
+q7a=quantile(table7_a_approx, probs = c(0.025,0.975))
+
+table7_b_approx <- LZ_approx_CHR(W_exog, data$tot_bomb_per, 
+                                       data$lit_rate, 
+                                       data$diff_17, mu=0, omega=0.1, m=10000)
+q7b=quantile(table7_b_approx, probs = c(0.025,0.975))
+
+table8_approx <- LZ_approx_CHR(W_exog, data$tot_bomb_per, 
+                                                  data$popdensity1999, 
+                                                  data$diff_17, mu=0, omega=0.1, m=10000)
+q8=quantile(table8_approx, probs = c(0.025,0.975))
+
+### Then plot it 
+
+Poverty_density=data_frame(beta = table4_approx) %>%
+  ggplot(., aes(beta)) + 
+  geom_density()+geom_vline(xintercept=mean(table4_approx), 
+                color = "black", size=1)+
+                geom_vline(xintercept=q4,color = "red",linetype="dashed", size=0.5) +
+                ggtitle("Poverty coefficient")
+
+Elec_density=data_frame(beta = table7_a_approx) %>%
+  ggplot(., aes(beta)) + 
+  geom_density()+geom_vline(xintercept=mean(table7_a_approx), 
+                            color = "black", size=1)+
+  geom_vline(xintercept=q7a,color = "red",linetype="dashed", size=0.5)+
+  ggtitle("Electricity Rate coefficient")
+
+Literacy_density=data_frame(beta = table7_b_approx) %>%
+  ggplot(., aes(beta)) + 
+  geom_density()+geom_vline(xintercept=mean(table7_b_approx), 
+                            color = "black", size=1)+
+  geom_vline(xintercept=q7b,color = "red",linetype="dashed", size=0.5)+
+  ggtitle("Literacy Rate coefficient")
+
+Density_density=data_frame(beta = table8_approx) %>%
+  ggplot(., aes(beta)) + 
+  geom_density()+geom_vline(xintercept=mean(table8_approx), 
+                            color = "black", size=1)+
+  geom_vline(xintercept=q8,color = "red",linetype="dashed", size=0.5)+
+  ggtitle("Density coefficient")
+
+ggarrange(Poverty_density, Elec_density, Literacy_density, Density_density, 
+          ncol = 2, nrow = 2)
+
+CI_=data.frame(rbind(q4, q7a, q7b, q8))
+beta_names=c("Poverty coefficient","Electricity Rate coefficient", "Literacy Rate coefficient", "Density coefficient" )
+CI=cbind(beta_names, CI_)
+CI
+
+```
+
+
+## Our lovely Young
+
+### Leverages 
+
+In this section we briefly considered Young's propositions regarding leverage and the impact it could have on the significance of the parameters. To this end we first plot the leverages for each observation, conducted an analysis with a sub-samble that does not contain observations that had a leverage that was 3 times higher or more than the average leverage in the sample. The leverages are drawn from the the IV regression of poverty rates on bombing intensity. As we can see, bombing's coefficient is still not statistically different from 0, but the first stage remains significant even at a 0.01 level. Thus, the (lack of) results are not driven by high-leverage observations, and the results found in the paper still hold if one removes very high-leverage observations. After exploring the assumption of homoskedasticity, we will further test the robustness of results by using jackknife and bootstrap methods. 
+
+```{r Young Paper, echo=FALSE}
+
+### Here we will discuss the leverage bit
+
+library(sandwich)
+
+# Recover the leverage of each observation and plot with a line displaying 3*mean leverage as threshold
+leverages=hatvalues(table4_IV)
+plot(leverages)
+abline(h = 3*mean(leverages))
+
+# Bind leverage vector with the dataset to subsample low leverage observations
+data_leverage=cbind(leverages,data)
+subset_data=subset(data_leverage, leverages<=3*mean(leverages) )
+
+# Reconduct IV on the subsample
+IV_pov_subset=ivreg(poverty_p0~tot_bmr_per + popdensity6061 + south + area_251_500m + area_501_1000m + area_over_1000m + soil_1 + soil_3 + soil_6 + soil_7 + soil_8 + soil_9 + soil_10 + soil_11 + soil_12 + soil_14 + soil_24 + soil_26+ soil_33+ soil_34+ soil_35+ soil_39+ soil_40+ soil_41 + north_lat + pre_avg + tmp_avg |diff_17+ popdensity6061 + south + area_251_500m + area_501_1000m + area_over_1000m + soil_1 + soil_3 + soil_6 + soil_7 + soil_8 + soil_9 + soil_10 + soil_11 + soil_12 + soil_14 + soil_24+ soil_26+ soil_33+ soil_34+ soil_35+ soil_39+ soil_40+ soil_41 + north_lat + pre_avg + tmp_avg, data=subset_data)
+
+coeftest(IV_pov_subset, vcov. = sandwich::vcovCL, cluster = subset_data$province, type="HC1")
+
+fs=lm(tot_bmr_per~diff_17+ popdensity6061 + south + area_251_500m + area_501_1000m + area_over_1000m + soil_1 + soil_3 + soil_6 + soil_7 + soil_8 + soil_9 + soil_10 + soil_11 + soil_12 + soil_14 + soil_24+ soil_26+ soil_33+ soil_34+ soil_35+ soil_39+ soil_40+ soil_41 + north_lat + pre_avg + tmp_avg, data=subset_data)
+coeftest(fs, vcov. = sandwich::vcovCL, cluster = subset_data$province, type="HC1")
+
+### You asked for neat code, here it is. We can see that several observations have very high leverages 
+
+
+```
+
+### Homoskedasticity
+
+As was suggested in the Young (2022) the tests of homoscedasticity, which involve regressing squared residuals on the explanatory variables suggested by Wooldridge (2013), typically reject the null hypothesis of homoscedasticity 2/3 of the time. When there are concentrated leverage and heteroskedastic errors, the coefficients and robust standard errors obtained from the regression are highly affected by the values of a few residuals, which can make them very unstable. We check for homoscedasticity by the method proposed by Wooldridge(2013) where we obtain the residuals, square them and run a new regression taking the squared residuals as the dependent variable. Lastly, we obtain the R squared and compute the significance of coefficients. We fail to reject the null hypothesis of homoscedasticity in 3 out of 4 regression models as p-value is higher than 0.05. In the 4th model where the dependent variable is population density we reject the null of homoscedasticity at 1% level of significance.
+
+
+```{r Heteroskedasticity Test, echo=FALSE}
+
+#Checking for homoskedasticity. Obtaining the residuals
+residuals <- resid(table4_IV)
+
+# Squaring the residuals
+squared_resid <- residuals^2
+
+# Regressing squared residuals on right-hand side variables
+squared_resid_reg <- lm(squared_resid ~ W,
+          data = data)
+
+#Residuals of the squared residuals regression
+squared_resid_resid <- resid(squared_resid_reg)
+
+#Sum of squared residuals of the squared residuals regression
+sum_squared_resid_resid <- sum(squared_resid_resid^2)
+
+#Degrees of freedom of the squared residuals regression
+df_squared_resid_reg <- df.residual(squared_resid_reg)
+
+#Wooldridge test statistic
+n <- length(residuals)
+W <- n * sum_squared_resid_resid / (residuals %*% residuals)
+
+# P-value of the Wooldridge test using the F distribution
+p_value <- pf(W, df_squared_resid_reg, n - df_squared_resid_reg - 1, lower.tail = FALSE)
+
+# Print the results
+cat("Wooldridge test for heteroskedasticity:\n")
+cat("Test statistic:", W, "\n")
+cat("Degrees of freedom:", df_squared_resid_reg, n - df_squared_resid_reg - 1, "\n")
+cat("p-value:", p_value, "\n")
+
+#Same for Table 7
+residuals <- resid(table7_IV1)
+squared_resid <- residuals^2
+squared_resid_reg <- lm(squared_resid ~ W,
+                        data = data)
+squared_resid_resid <- resid(squared_resid_reg)
+sum_squared_resid_resid <- sum(squared_resid_resid^2)
+df_squared_resid_reg <- df.residual(squared_resid_reg)
+n <- length(residuals)
+W <- n * sum_squared_resid_resid / (residuals %*% residuals)
+p_value <- pf(W, df_squared_resid_reg, n - df_squared_resid_reg - 1, lower.tail = FALSE)
+cat("p-value:", p_value, "\n")
+
+
+residuals <- resid(table7_IV2)
+squared_resid <- residuals^2
+squared_resid_reg <- lm(squared_resid ~ W,
+                        data = data)
+squared_resid_resid <- resid(squared_resid_reg)
+sum_squared_resid_resid <- sum(squared_resid_resid^2)
+df_squared_resid_reg <- df.residual(squared_resid_reg)
+n <- length(residuals)
+W <- n * sum_squared_resid_resid / (residuals %*% residuals)
+p_value <- pf(W, df_squared_resid_reg, n - df_squared_resid_reg - 1, lower.tail = FALSE)
+cat("p-value:", p_value, "\n")
+
+#Same for Table 8
+residuals <- resid(table8_IV)
+squared_resid <- residuals^2
+squared_resid_reg <- lm(squared_resid ~ W,
+                        data = data)
+squared_resid_resid <- resid(squared_resid_reg)
+sum_squared_resid_resid <- sum(squared_resid_resid^2)
+df_squared_resid_reg <- df.residual(squared_resid_reg)
+n <- length(residuals)
+W <- n * sum_squared_resid_resid / (residuals %*% residuals)
+p_value <- pf(W, df_squared_resid_reg, n - df_squared_resid_reg - 1, lower.tail = FALSE)
+cat("p-value:", p_value, "\n")
+
+```
+
+### Resampling procedures
+
+Jackknife and bootstrap procedures were used to estimate 95% confidence intervals for each IV regression’s coefficient of interest, p-value for the coefficient’s t-test, and first-stage F statistic. The intervals are displayed in figures x-y. In general, the F statistics remain well above ten under either procedure, suggesting that the distance instrument is sufficiently strong. Similarly, the coefficients remain around 0, meaning that the null findings of the authors are robust to resampling inference. We do see more variation in the p-value results with relatively large concentrations of p-values below 0.05 in some regressions, but the vast majority remain larger. Taken together, the null results Miguel and Roland (2011) appear to be valid in the face of the inferential robustness checks suggested by Young (2022).
+
+```{r Leave-one-out sensitivity for first stage F statistics, echo = FALSE}
+
+# Create a function that loops, leaves one observation out, reestimates the IV, and returns the first-stage F statistic
+looF <- function(formula, data){
+  F <- c()
+  for (i in 1:nrow(data)){
+    loo_data <- data[-i,]
+    reg <- ivreg(formula, data = loo_data)
+    F <- c(F, summary(reg)$diagnostics[1, 3])
+  }
+  return(F)
+}
+
+# After each jacknife and bootstrap function, we use the function then get the 95% CI with quantiles
+table4_loof <- looF(formula1, data = data)
+table7_loof1 <- looF(formula2, data = data)
+table7_loof2 <- looF(formula3, data = data)
+table8_loof <- looF(formula4, data = data)
+
+q4_loof <- quantile(table4_loof, probs = c(0.025,0.975))
+q7_loof1 <- quantile(table7_loof1, probs = c(0.025,0.975))
+q7_loof2 <- quantile(table7_loof2, probs = c(0.025,0.975))
+q8_loof <- quantile(table8_loof, probs = c(0.025,0.975))
+```
+
+
+```{r Leave-one-out sensitivity for p-values, echo = FALSE}
+
+# Create a function that loops, leaves one observation out, reestimates the IV with clustering, and returns the p-value for the coefficient of interest
+looP <- function(formula,  data){
+  p <- c()
+  for (i in 1:nrow(data)){
+    loo_data <- data[-i,]
+    reg <- ivreg(formula, data = loo_data)
+    p <- c(p, coeftest(reg, vcov. = sandwich::vcovCL, cluster = loo_data$province, type = 'HC1')[2, 4])
+  }
+return(p)
+}
+table4_loop <- looP(formula1, data)
+table7_loop1 <- looP(formula2, data)
+table7_loop2 <- looP(formula3, data)
+table8_loop <- looP(formula4, data)
+
+q4_loop <- quantile(table4_loop, probs = c(0.025,0.975))
+q7_loop1 <- quantile(table7_loop1, probs = c(0.025,0.975))
+q7_loop2 <- quantile(table7_loop2, probs = c(0.025,0.975))
+q8_loop <- quantile(table8_loop, probs = c(0.025,0.975))
+```
+
+
+```{r Leave-one-out sensitivity for coefficients, echo = F}
+
+# Create a function that loops, leaves one observation out, reestimates the IV, and returns the coefficient of interest
+looC <- function(formula, data){
+  c <- c()
+  for (i in 1:nrow(data)){
+    loo_data <- data[-i,]
+    reg <- ivreg(formula, data = loo_data)
+    c <- c(c, reg$coefficients[2])
+  }
+  return(c)
+}
+table4_looc <- looC(formula1, data)
+table7_looc1 <- looC(formula2, data)
+table7_looc2 <- looC(formula3, data)
+table8_looc <- looC(formula4, data)
+
+q4_looc <- quantile(table4_looc, probs = c(0.025,0.975))
+q7_looc1 <- quantile(table7_looc1, probs = c(0.025,0.975))
+q7_looc2 <- quantile(table7_looc2, probs = c(0.025,0.975))
+q8_looc <- quantile(table8_looc, probs = c(0.025,0.975))
+
+```
+
+```{r Bootstrap for all parameters and statistics, echo = F}
+
+# This function is a combination of the previous three. The only real difference is that it draws samples with replacement R times instead of leaving observations out.
+clustered_bootstrap_IV <- function(formula, data, R){
+  F <- c()
+  p <- c()
+  c <- c()
+  for (i in 1:R){
+    n <- nrow(data)
+    x <- sample(seq(1:n), size = n, replace = T)
+    boot_data <- data[x,]
+    reg <- ivreg(formula, data = boot_data)
+    F <- c(F, summary(reg)$diagnostics[1, 3])
+    p <- c(p, coeftest(reg, vcov. = sandwich::vcovCL, cluster = data$province, type = 'HC1')[2, 4])
+    c <- c(c, reg$coefficients[2])
+  }
+  results <- data.frame(cbind(F, p, c))
+  return(results)
+}
+table4_boot <- clustered_bootstrap_IV(formula1, data, 500)
+table7_boot1 <- clustered_bootstrap_IV(formula2, data, 500)
+table7_boot2 <- clustered_bootstrap_IV(formula3, data, 500)
+table8_boot <- clustered_bootstrap_IV(formula4, data, 500)
+
+q4_boot_F <- quantile(table4_boot[,1], probs = c(0.025,0.975))
+q7_boot1_F <- quantile(table7_boot1[,1], probs = c(0.025,0.975))
+q7_boot2_F <- quantile(table7_boot2[,1], probs = c(0.025,0.975))
+q8_boot_F <- quantile(table8_boot[,1], probs = c(0.025,0.975))
+
+q4_boot_p <- quantile(table4_boot[,2], probs = c(0.025,0.975))
+q7_boot1_p <- quantile(table7_boot1[,2], probs = c(0.025,0.975))
+q7_boot2_p <- quantile(table7_boot2[,2], probs = c(0.025,0.975))
+q8_boot_p <- quantile(table8_boot[,2], probs = c(0.025,0.975))
+
+q4_boot_c <- quantile(table4_boot[,3], probs = c(0.025,0.975))
+q7_boot1_c <- quantile(table7_boot1[,3], probs = c(0.025,0.975))
+q7_boot2_c <- quantile(table7_boot2[,3], probs = c(0.025,0.975))
+q8_boot_c <- quantile(table8_boot[,3], probs = c(0.025,0.975))
+
+```
+
+```{r Graphs for Jackknife, echo = F}
+Poverty_coef_jack = data_frame(beta = table4_looc) %>%
+  ggplot(., aes(beta)) + 
+  geom_density()+geom_vline(xintercept=mean(table4_looc), 
+                color = "black", size=1)+
+                geom_vline(xintercept=q4_looc, color = "red",linetype="dashed", size=0.5) +
+                ggtitle("JK Poverty Coef")
+
+Elec_coef_jack = data_frame(beta = table7_looc1) %>%
+  ggplot(., aes(beta)) + 
+  geom_density()+geom_vline(xintercept=mean(table7_looc1), 
+                color = "black", size=1)+
+                geom_vline(xintercept=q7_looc1, color = "red",linetype="dashed", size=0.5) +
+                ggtitle("JK Electricity Coef")
+
+Lit_coef_jack = data_frame(beta = table7_looc2) %>%
+  ggplot(., aes(beta)) + 
+  geom_density()+geom_vline(xintercept=mean(table7_looc2), 
+                color = "black", size=1)+
+                geom_vline(xintercept=q7_looc2, color = "red",linetype="dashed", size=0.5) +
+                ggtitle("JK Literacy Coef")
+
+Pop_coef_jack = data_frame(beta = table8_looc) %>%
+  ggplot(., aes(beta)) + 
+  geom_density()+geom_vline(xintercept=mean(table8_looc), 
+                color = "black", size=1)+
+                geom_vline(xintercept=q8_looc, color = "red",linetype="dashed", size=0.5) +
+                ggtitle("JK Pop Dens Coef")
+
+Poverty_p_jack = data_frame(beta = table4_loop) %>%
+  ggplot(., aes(beta)) + 
+  geom_density()+geom_vline(xintercept=mean(table4_loop), 
+                color = "black", size=1)+
+                geom_vline(xintercept=q4_loop, color = "red",linetype="dashed", size=0.5) +
+                ggtitle("JK Poverty p")
+
+Elec_p_jack = data_frame(beta = table7_loop1) %>%
+  ggplot(., aes(beta)) + 
+  geom_density()+geom_vline(xintercept=mean(table7_loop1), 
+                color = "black", size=1)+
+                geom_vline(xintercept=q7_loop1, color = "red",linetype="dashed", size=0.5) +
+                ggtitle("JK Electricity p")
+
+Lit_p_jack = data_frame(beta = table7_loop2) %>%
+  ggplot(., aes(beta)) + 
+  geom_density()+geom_vline(xintercept=mean(table7_loop2), 
+                color = "black", size=1)+
+                geom_vline(xintercept=q7_loop2, color = "red",linetype="dashed", size=0.5) +
+                ggtitle("JK Literacy p")
+
+Pop_p_jack = data_frame(beta = table8_loop) %>%
+  ggplot(., aes(beta)) + 
+  geom_density()+geom_vline(xintercept=mean(table8_loop), 
+                color = "black", size=1)+
+                geom_vline(xintercept=q8_loop, color = "red",linetype="dashed", size=0.5) +
+                ggtitle("JK Pop Dens p")
+
+Poverty_F_jack = data_frame(beta = table4_loof) %>%
+  ggplot(., aes(beta)) + 
+  geom_density()+geom_vline(xintercept=mean(table4_loof), 
+                color = "black", size=1)+
+                geom_vline(xintercept=q4_loof, color = "red",linetype="dashed", size=0.5) +
+                ggtitle("JK Poverty F")
+
+Elec_F_jack = data_frame(beta = table7_loof1) %>%
+  ggplot(., aes(beta)) + 
+  geom_density()+geom_vline(xintercept=mean(table7_loof1), 
+                color = "black", size=1)+
+                geom_vline(xintercept=q7_loof1, color = "red",linetype="dashed", size=0.5) +
+                ggtitle("JK Electricity F")
+
+Lit_F_jack = data_frame(beta = table7_loof2) %>%
+  ggplot(., aes(beta)) + 
+  geom_density()+geom_vline(xintercept=mean(table7_loof2), 
+                color = "black", size=1)+
+                geom_vline(xintercept=q7_loof2, color = "red",linetype="dashed", size=0.5) +
+                ggtitle("JK Literacy F")
+
+Pop_F_jack = data_frame(beta = table8_loof) %>%
+  ggplot(., aes(beta)) + 
+  geom_density()+geom_vline(xintercept=mean(table8_loof), 
+                color = "black", size=1)+
+                geom_vline(xintercept=q8_loof, color = "red",linetype="dashed", size=0.5) +
+                ggtitle("JK Pop Den F")
+
+
+
+ggarrange(Poverty_coef_jack, Poverty_p_jack, Poverty_F_jack,
+          Elec_coef_jack, Elec_p_jack, Elec_F_jack,
+          Lit_coef_jack, Lit_p_jack, Lit_F_jack,
+          Pop_coef_jack, Pop_p_jack, Pop_F_jack,
+          ncol = 3, nrow = 4)
+```
+
+```{r Graphs for Bootstrap, echo = F}
+Poverty_coef_boot = data_frame(beta = table4_boot[,3]) %>%
+  ggplot(., aes(beta)) + 
+  geom_density()+geom_vline(xintercept=mean(table4_boot[,3]), 
+                color = "black", size=1)+
+                geom_vline(xintercept=q4_boot_c, color = "red",linetype="dashed", size=0.5) +
+                ggtitle("BS Poverty Coef")
+
+Elec_coef_boot = data_frame(beta = table7_boot1[,3]) %>%
+  ggplot(., aes(beta)) + 
+  geom_density()+geom_vline(xintercept=mean(table7_boot1[,3]), 
+                color = "black", size=1)+
+                geom_vline(xintercept=q7_boot1_c, color = "red",linetype="dashed", size=0.5) +
+                ggtitle("BS Electricity Coef")
+
+Lit_coef_boot = data_frame(beta = table7_boot2[,3]) %>%
+  ggplot(., aes(beta)) + 
+  geom_density()+geom_vline(xintercept=mean(table7_boot2[,3]), 
+                color = "black", size=1)+
+                geom_vline(xintercept=q7_boot2_c, color = "red",linetype="dashed", size=0.5) +
+                ggtitle("BS Literacy Coef")
+
+Pop_coef_boot = data_frame(beta = table8_boot[,3]) %>%
+  ggplot(., aes(beta)) + 
+  geom_density()+geom_vline(xintercept=mean(table8_boot[,3]), 
+                color = "black", size=1)+
+                geom_vline(xintercept=q8_boot_c, color = "red",linetype="dashed", size=0.5) +
+                ggtitle("BS Pop Dens Coef")
+
+Poverty_p_boot = data_frame(beta = table4_boot[,2]) %>%
+  ggplot(., aes(beta)) + 
+  geom_density()+geom_vline(xintercept=mean(table4_boot[,2]), 
+                color = "black", size=1)+
+                geom_vline(xintercept=q4_boot_p, color = "red",linetype="dashed", size=0.5) +
+                ggtitle("BS Poverty p")
+
+Elec_p_boot = data_frame(beta = table7_boot1[,2]) %>%
+  ggplot(., aes(beta)) + 
+  geom_density()+geom_vline(xintercept=mean(table7_boot1[,2]), 
+                color = "black", size=1)+
+                geom_vline(xintercept=q7_boot1_p, color = "red",linetype="dashed", size=0.5) +
+                ggtitle("BS Electricity p")
+
+Lit_p_boot = data_frame(beta = table7_boot2[,2]) %>%
+  ggplot(., aes(beta)) + 
+  geom_density()+geom_vline(xintercept=mean(table7_boot2[,2]), 
+                color = "black", size=1)+
+                geom_vline(xintercept=q7_boot2_p, color = "red",linetype="dashed", size=0.5) +
+                ggtitle("BS Literacy p")
+
+Pop_p_boot = data_frame(beta = table8_boot[,2]) %>%
+  ggplot(., aes(beta)) + 
+  geom_density()+geom_vline(xintercept=mean(table8_boot[,2]), 
+                color = "black", size=1)+
+                geom_vline(xintercept=q8_boot_p, color = "red",linetype="dashed", size=0.5) +
+                ggtitle("BS Population p")
+
+Poverty_F_boot = data_frame(beta = table4_boot[,1]) %>%
+  ggplot(., aes(beta)) + 
+  geom_density()+geom_vline(xintercept=mean(table4_boot[,1]), 
+                color = "black", size=1)+
+                geom_vline(xintercept=q4_boot_F, color = "red",linetype="dashed", size=0.5) +
+                ggtitle("BS Poverty F")
+
+Elec_F_boot = data_frame(beta = table7_boot1[,1]) %>%
+  ggplot(., aes(beta)) + 
+  geom_density()+geom_vline(xintercept=mean(table7_boot1[,1]), 
+                color = "black", size=1)+
+                geom_vline(xintercept=q7_boot1_F, color = "red",linetype="dashed", size=0.5) +
+                ggtitle("BS Electricity F")
+
+Lit_F_boot = data_frame(beta = table7_boot2[,1]) %>%
+  ggplot(., aes(beta)) + 
+  geom_density()+geom_vline(xintercept=mean(table7_boot2[,1]), 
+                color = "black", size=1)+
+                geom_vline(xintercept=q7_boot2_F, color = "red",linetype="dashed", size=0.5) +
+                ggtitle("BS Literacy F")
+
+Pop_F_boot = data_frame(beta = table8_boot[,1]) %>%
+  ggplot(., aes(beta)) + 
+  geom_density()+geom_vline(xintercept=mean(table8_boot[,1]), 
+                color = "black", size=1)+
+                geom_vline(xintercept=q8_boot_F, color = "red",linetype="dashed", size=0.5) +
+                ggtitle("BS Population F")
+
+
+ggarrange(Poverty_coef_boot, Poverty_p_boot, Poverty_F_boot,
+          Elec_coef_boot, Elec_p_boot, Elec_F_boot,
+          Lit_coef_boot, Lit_p_boot, Lit_F_boot,
+          Pop_coef_boot, Pop_p_boot, Pop_F_boot,
+          ncol = 3, nrow = 4)
+
+```
+
+### Conclusion
+
+In this paper, we have replicated the results of Miguel and Roland (2011). The findings of the authors are rather remarkable in their statistical insignificance. It is unusual to see null results published in economics and it is unusual to see them published about a topic, such as conflict traps, that we have strong prior theoretical results about. To further explore the topic, we have tested the robustness of these null findings using a variety of methods proposed by Conley, Hansen, and Rossi (2012) and Young (2022). These tests included jackknifing and bootstrapping parameter and statistic estimates, along with removing high-leverage observations, to assess the sensitivity of estimation and inference to high-leverage observations. The tests also included a local-to-zero approximation method to perform a sensitivity analysis on the coefficient estimates. While we do reject the null that their errors are homoskedastic, heteroskedasticity is such a common problem in econometric work that the norm is to assume that errors are heteroskedastic, and the authors estimation strategy accounted for this. Every check included in this paper supported the null findings that the authors originally presented. Of course, as Miguel and Roland (2011) note, null evidence does not negate the existence of conflict traps, especially if labour or capital are mobile. However, given our battery of robustness checks, we find no evidence to support their existence.
+
+### References
+Conley, Timothy G., Christian Hansen, and Peter E. Rossi, “Plausibly Exoge-
+nous,” Review of Economics and Statistics, 2012, 94 (1), 260–272.
+
+Miguel, Edward and Gerard Roland, “The long-run impact of bombing Vietnam,”
+Journal of Development Economics, sep 2011, 96 (1), 1–15.
+
+Young, Alwyn, “Consistency without Inference: Instrumental Variables in Practical
+Application,” European Economic Review, aug 2022, 147, 104112.
